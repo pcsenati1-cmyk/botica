@@ -1,6 +1,10 @@
 <template>
   <div class="stat-card" :class="color">
-    <div class="sc-icon" v-html="icon"></div>
+    <div class="sc-icon">
+      <slot name="icon">
+        <span v-html="icon"></span>
+      </slot>
+    </div>
     <div class="sc-body">
       <div class="sc-val">{{ value }}</div>
       <div class="sc-lbl">{{ label }}</div>
@@ -16,7 +20,14 @@
 </template>
 
 <script setup>
-defineProps({ value: [String,Number], label: String, icon: String, color: String, trend: String, trendUp: Boolean })
+defineProps({ 
+  value: [String,Number], 
+  label: String, 
+  icon: String, 
+  color: String, 
+  trend: String, 
+  trendUp: Boolean 
+})
 </script>
 
 <style scoped>

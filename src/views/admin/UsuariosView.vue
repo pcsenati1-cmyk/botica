@@ -1,23 +1,43 @@
 ﻿<template>
   <div class="animate-fade">
-    <PageHeader title="Usuarios" subtitle="Gestiona el acceso al sistema" icon="👥">
-      <button class="btn-add" @click="openModal()">+ Nuevo Usuario</button>
+    <PageHeader title="Usuarios" subtitle="Gestiona el acceso al sistema">
+      <template #icon>
+        <Users :size="20" />
+      </template>
+      <button class="btn-add" @click="openModal()">
+        <Plus :size="16" /> Nuevo Usuario
+      </button>
     </PageHeader>
 
     <!-- Stats -->
     <div class="stats-row">
-      <StatsCard :value="usuarios.length" label="Total usuarios" color="blue"
-        icon='<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2 18c0-3.3 2.7-6 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="15" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M12 18h6M15 15v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
-      />
-      <StatsCard :value="admins" label="Administradores" color="purple"
-        icon='<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2l2 4h4l-3 3 1 4-4-2-4 2 1-4-3-3h4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
-      />
-      <StatsCard :value="vendedores" label="Vendedores" color="green"
-        icon='<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M3 18c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
-      />
-      <StatsCard :value="activos" label="Activos" color="orange"
-        icon='<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-      />
+      <StatsCard :value="usuarios.length" label="Total usuarios" color="blue">
+        <template #icon><Users :size="20" /></template>
+      </StatsCard>
+      <StatsCard :value="admins" label="Administradores" color="purple">
+        <template #icon><Shield :size="20" /></template>
+      </StatsCard>
+      <StatsCard :value="vendedores" label="Vendedores" color="green">
+        <template #icon><UserCheck :size="20" /></template>
+      </StatsCard>
+      <StatsCard :value="activos" label="Activos" color="orange">
+        <template #icon><CheckCircle :size="20" /></template>
+      </StatsCard>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+      <div class="filter-chips">
+        <button class="chip" :class="{ active: filterActivo === 'todos' }" @click="filterActivo = 'todos'">
+          Todos <span class="chip-count">{{ usuarios.length }}</span>
+        </button>
+        <button class="chip" :class="{ active: filterActivo === 'activos' }" @click="filterActivo = 'activos'">
+          Activos <span class="chip-count">{{ activos }}</span>
+        </button>
+        <button class="chip" :class="{ active: filterActivo === 'inactivos' }" @click="filterActivo = 'inactivos'">
+          Inactivos <span class="chip-count">{{ inactivos }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- Info -->
@@ -28,7 +48,7 @@
 
     <!-- Tabla -->
     <DataTable
-      :rows="usuarios"
+      :rows="filteredUsuarios"
       :loading="loading"
       :columns="cols"
       :searchFields="['nombres','apellidos','email','rol']"
@@ -56,23 +76,26 @@
         <td><span class="sub">{{ row.email }}</span></td>
         <td>
           <span class="role-pill" :class="row.rol === 'administrador' ? 'admin' : 'vendor'">
-            {{ row.rol === 'administrador' ? '👑 Admin' : '👤 Vendedor' }}
+            {{ row.rol === 'administrador' ? 'Admin' : 'Vendedor' }}
           </span>
         </td>
         <td><span class="sub">{{ row.dni || '—' }}</span></td>
         <td><span class="sub">{{ row.telefono || '—' }}</span></td>
         <td>
-          <span class="status-pill" :class="row.estado !== false ? 'active' : 'inactive'">
-            <span class="s-dot"></span>
+          <button class="status-btn" :class="row.estado !== false ? 'active' : 'inactive'" @click="toggleEstado(row)">
+            <Circle :size="8" :fill="row.estado !== false ? 'currentColor' : 'none'" />
             {{ row.estado !== false ? 'Activo' : 'Inactivo' }}
-          </span>
+          </button>
         </td>
         <td>
-          <ActionButtons
-            @edit="openModal(row)"
-            @delete="toDelete = row; showDel = true"
-            :deleteDisabled="row.auth_id === currentUserId"
-          />
+          <div class="action-btns">
+            <button class="action-btn edit" @click="openModal(row)" title="Editar">
+              <Pencil :size="14" />
+            </button>
+            <button class="action-btn delete" @click="toDelete = row; showDel = true" :disabled="row.auth_id === currentUserId" title="Eliminar">
+              <Trash2 :size="14" />
+            </button>
+          </div>
         </td>
       </template>
     </DataTable>
@@ -82,7 +105,6 @@
       :show="showModal"
       :title="editing ? 'Editar Usuario' : 'Nuevo Usuario'"
       :subtitle="editing ? 'Actualiza la información del usuario' : 'Completa los datos para crear el acceso'"
-      :icon="editing ? '✏️' : '👤'"
       @close="showModal = false"
     >
       <form @submit.prevent="handleSave" id="user-form">
@@ -90,13 +112,13 @@
           <FormField label="Nombres" v-model="form.nombres" placeholder="Juan" required :error="errors.nombres" />
           <FormField label="Apellidos" v-model="form.apellidos" placeholder="Pérez" required :error="errors.apellidos" />
         </div>
-        <FormField label="Correo electrónico" v-model="form.email" type="email" placeholder="correo@ejemplo.com" required :disabled="!!editing" :hint="editing ? '⚠️ El email no se puede modificar' : ''" :error="errors.email" />
+        <FormField label="Correo electrónico" v-model="form.email" type="email" placeholder="correo@ejemplo.com" required :disabled="!!editing" :hint="editing ? 'El email no se puede modificar' : ''" :error="errors.email" />
         <FormField v-if="!editing" label="Contraseña" v-model="form.password" type="password" placeholder="Mínimo 6 caracteres" required :error="errors.password" />
         <div class="form-grid">
           <FormField label="Rol" v-model="form.rol" type="select" required>
             <template #options>
-              <option value="vendedor">👤 Vendedor</option>
-              <option value="administrador">👑 Administrador</option>
+              <option value="vendedor">Vendedor</option>
+              <option value="administrador">Administrador</option>
             </template>
           </FormField>
           <FormField label="DNI" v-model="form.dni" placeholder="12345678" />
@@ -122,9 +144,9 @@
     <!-- Confirm delete -->
     <ConfirmModal
       :show="showDel"
-      title="Desactivar Usuario"
-      :message="`¿Desactivar a ${toDelete?.nombres} ${toDelete?.apellidos}? Perderá acceso al sistema.`"
-      confirmText="Desactivar"
+      title="Eliminar Usuario"
+      :message="`¿Estás seguro de eliminar a ${toDelete?.nombres} ${toDelete?.apellidos}? Esta acción no se puede deshacer.`"
+      confirmText="Eliminar"
       variant="danger"
       :loading="saving"
       @confirm="doDelete"
@@ -140,10 +162,10 @@ import { ref, computed, onMounted } from 'vue'
 import { supabase, auth as supaAuth } from '@/supabase'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { Users, Shield, UserCheck, CheckCircle, Plus, Pencil, Trash2, Circle } from 'lucide-vue-next'
 import PageHeader from '@/components/admin/PageHeader.vue'
 import StatsCard from '@/components/admin/StatsCard.vue'
 import DataTable from '@/components/admin/DataTable.vue'
-import ActionButtons from '@/components/admin/ActionButtons.vue'
 import FormModal from '@/components/admin/FormModal.vue'
 import FormField from '@/components/admin/FormField.vue'
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
@@ -162,10 +184,18 @@ const toDelete = ref(null)
 const formError = ref(null)
 const errors = ref({})
 
-const currentUserId = computed(() => authStore.user?.id)
+const currentUserId = computed(() => authStore.userProfile?.auth_id)
 const admins = computed(() => usuarios.value.filter(u => u.rol === 'administrador').length)
 const vendedores = computed(() => usuarios.value.filter(u => u.rol !== 'administrador').length)
 const activos = computed(() => usuarios.value.filter(u => u.estado !== false).length)
+const inactivos = computed(() => usuarios.value.filter(u => u.estado === false).length)
+const filterActivo = ref('todos')
+
+const filteredUsuarios = computed(() => {
+  if (filterActivo.value === 'todos') return usuarios.value
+  if (filterActivo.value === 'activos') return usuarios.value.filter(u => u.estado !== false)
+  return usuarios.value.filter(u => u.estado === false)
+})
 
 const cols = [
   { key: 'usuario', label: 'Usuario' },
@@ -182,6 +212,14 @@ const color = (n) => COLORS[(n || 'U').charCodeAt(0) % COLORS.length]
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-PE') : '—'
 
 const form = ref({ nombres: '', apellidos: '', email: '', password: '', rol: 'vendedor', dni: '', telefono: '' })
+
+const handleError = (error) => {
+  if (!error) return 'Error desconocido'
+  if (error.message?.includes('already been registered')) return 'Este correo ya está registrado'
+  if (error.message?.includes('Invalid login')) return 'Credenciales inválidas'
+  if (error.message?.includes('password')) return 'La contraseña debe tener al menos 6 caracteres'
+  return error.message || 'Error al guardar'
+}
 
 function openModal(user = null) {
   editing.value = user
@@ -210,41 +248,77 @@ async function handleSave() {
   try {
     if (editing.value) {
       const { error } = await supabase.from('usuarios').update({
-        nombres: form.value.nombres, apellidos: form.value.apellidos,
-        rol: form.value.rol, dni: form.value.dni || null, telefono: form.value.telefono || null,
+        nombres: form.value.nombres,
+        apellidos: form.value.apellidos,
+        rol: form.value.rol,
+        dni: form.value.dni || null,
+        telefono: form.value.telefono || null,
       }).eq('id', editing.value.id)
       if (error) throw error
-      showToast('Usuario actualizado correctamente')
+      
+      showToast('Usuario actualizado correctamente', 'success')
     } else {
       const { data: authData, error: authErr } = await supaAuth.signUp({
-        email: form.value.email, password: form.value.password,
+        email: form.value.email,
+        password: form.value.password,
         options: { data: { nombres: form.value.nombres, rol: form.value.rol } }
       })
       if (authErr) throw authErr
+      
+      if (!authData.user) {
+        throw new Error('No se pudo crear el usuario en autenticación')
+      }
+      
       const { error: dbErr } = await supabase.from('usuarios').insert([{
-        auth_id: authData.user?.id, nombres: form.value.nombres, apellidos: form.value.apellidos,
-        email: form.value.email, rol: form.value.rol, dni: form.value.dni || null, telefono: form.value.telefono || null,
+        auth_id: authData.user.id,
+        nombres: form.value.nombres,
+        apellidos: form.value.apellidos,
+        email: form.value.email,
+        rol: form.value.rol,
+        dni: form.value.dni || null,
+        telefono: form.value.telefono || null,
+        estado: true
       }])
       if (dbErr) throw dbErr
-      showToast('Usuario creado correctamente')
+      
+      showToast('Usuario creado correctamente. Se ha enviado un correo de confirmación.', 'success')
     }
     showModal.value = false
     await fetchUsuarios()
-  } catch (e) { formError.value = e.message }
-  finally { saving.value = false }
+  } catch (e) {
+    formError.value = handleError(e)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function doDelete() {
   if (!toDelete.value) return
   saving.value = true
   try {
-    const { error } = await supabase.from('usuarios').update({ estado: false }).eq('id', toDelete.value.id)
+    const { error } = await supabase.from('usuarios').delete().eq('id', toDelete.value.id)
     if (error) throw error
-    showToast('Usuario desactivado')
+    showToast('Usuario eliminado correctamente', 'success')
     showDel.value = false
     await fetchUsuarios()
-  } catch (e) { showToast(e.message, 'error') }
-  finally { saving.value = false }
+  } catch (e) {
+    showToast(e.message, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleEstado(user) {
+  if (!user || user.auth_id === currentUserId.value) return
+  try {
+    const nuevoEstado = user.estado === false ? true : false
+    const { error } = await supabase.from('usuarios').update({ estado: nuevoEstado }).eq('id', user.id)
+    if (error) throw error
+    showToast(`Usuario ${nuevoEstado ? 'activado' : 'desactivado'} correctamente`, 'success')
+    await fetchUsuarios()
+  } catch (e) {
+    showToast(e.message, 'error')
+  }
 }
 
 async function fetchUsuarios() {
@@ -291,6 +365,41 @@ onMounted(fetchUsuarios)
 .status-pill.active   { background: var(--success-light); color: var(--success); }
 .status-pill.inactive { background: var(--danger-light); color: var(--danger); }
 .s-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+.status-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; padding: 4px 10px;
+  border-radius: 99px; border: none; cursor: pointer;
+  transition: all 0.2s;
+}
+.status-btn.active { background: var(--success-light); color: var(--success); }
+.status-btn.inactive { background: var(--danger-light); color: var(--danger); }
+.status-btn:hover { transform: scale(1.05); }
+
+.action-btns { display: flex; gap: 6px; justify-content: center; }
+.action-btn {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--card-bg);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s; color: var(--text-secondary);
+}
+.action-btn:hover { border-color: var(--primary); color: var(--primary); }
+.action-btn.delete:hover { border-color: var(--danger); color: var(--danger); }
+.action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.filters-bar { margin-bottom: 16px; }
+.filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--card-bg);
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s;
+}
+.chip:hover { border-color: var(--primary); color: var(--primary); }
+.chip.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); }
+.chip-count { font-size: 10px; padding: 2px 6px; border-radius: 99px; background: var(--bg); }
+.chip.active .chip-count { background: var(--primary); color: white; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
 .form-err { display: flex; align-items: center; gap: 7px; padding: 10px 12px; background: var(--danger-light); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; color: var(--danger); font-size: 12px; font-weight: 500; margin-top: 8px; }

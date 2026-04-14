@@ -79,6 +79,12 @@ const routes = [
         component: () => import('@/views/admin/ProductoFormView.vue'),
         meta: { requiresAdmin: true, title: 'Editar Producto' }
       },
+      {
+        path: 'crear-admin',
+        name: 'CrearAdmin',
+        component: () => import('@/views/admin/CrearAdmin.vue'),
+        meta: { requiresAuth: false, title: 'Crear Admin' }
+      },
     ]
   },
 
@@ -93,11 +99,17 @@ const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
-  if (authStore.loading) await authStore.initialize()
-
+  
+  if (authStore.loading) {
+    await authStore.initialize()
+  }
+  
+  const isAdmin = authStore.userProfile?.rol === 'administrador' || 
+                 authStore.user?.user_metadata?.rol === 'administrador'
+  
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'Login' })
-  } else if (to.meta.requiresAdmin && !authStore.isAdmin) {
+  } else if (to.meta.requiresAdmin && !isAdmin) {
     next({ name: 'Dashboard' })
   } else if (['Login', 'Register', 'Home'].includes(to.name) && authStore.isAuthenticated) {
     next({ name: 'Dashboard' })

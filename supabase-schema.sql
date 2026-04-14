@@ -140,17 +140,93 @@ ALTER TABLE compras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE detalle_compras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE caja_movimientos ENABLE ROW LEVEL SECURITY;
 
--- Políticas Base (Autenticados pueden realizar operaciones completas)
-CREATE POLICY "Auth access categorias" ON categorias FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access proveedores" ON proveedores FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access usuarios" ON usuarios FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Anyone can read productos" ON productos FOR SELECT USING (true);
-CREATE POLICY "Auth access productos" ON productos FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access ventas" ON ventas FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access detalle_ventas" ON detalle_ventas FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access compras" ON compras FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access detalle_compras" ON detalle_compras FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Auth access caja" ON caja_movimientos FOR ALL USING (auth.role() = 'authenticated');
+-- Eliminar políticas antiguas
+DROP POLICY IF EXISTS "Auth access categorias" ON categorias;
+DROP POLICY IF EXISTS "Auth access proveedores" ON proveedores;
+DROP POLICY IF EXISTS "Auth access usuarios" ON usuarios;
+DROP POLICY IF EXISTS "Anyone can read productos" ON productos;
+DROP POLICY IF EXISTS "Auth access productos" ON productos;
+DROP POLICY IF EXISTS "Auth access ventas" ON ventas;
+DROP POLICY IF EXISTS "Auth access detalle_ventas" ON detalle_ventas;
+DROP POLICY IF EXISTS "Auth access compras" ON compras;
+DROP POLICY IF EXISTS "Auth access detalle_compras" ON detalle_compras;
+DROP POLICY IF EXISTS "Auth access caja" ON caja_movimientos;
+
+-- Políticas base: cualquier usuario autenticado puede leer
+CREATE POLICY "_public_read" ON categorias FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON proveedores FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON usuarios FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON productos FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON ventas FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON detalle_ventas FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON compras FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON detalle_compras FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "_public_read" ON caja_movimientos FOR SELECT USING (auth.role() = 'authenticated');
+
+-- Política para insertar usuarios (necesario para crear el primer admin)
+CREATE POLICY "auth_insert_usuarios" ON usuarios FOR INSERT WITH CHECK (
+  auth.role() = 'authenticated'
+);
+
+-- Política para que usuarios lean su propio perfil
+CREATE POLICY "usuarios_read_own" ON usuarios FOR SELECT USING (
+  auth.uid() = auth_id OR EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+
+-- Política temporal para insert sin restricciones (usar solo para setup inicial)
+CREATE POLICY "anon_insert_usuarios" ON usuarios FOR INSERT WITH CHECK (true);
+
+-- Políticas para ADMIN: acceso completo a todo
+CREATE POLICY "admin_full_categorias" ON categorias FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_proveedores" ON proveedores FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_usuarios" ON usuarios FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_productos" ON productos FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_ventas" ON ventas FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_detalle_ventas" ON detalle_ventas FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_compras" ON compras FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_detalle_compras" ON detalle_compras FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+CREATE POLICY "admin_full_caja" ON caja_movimientos FOR ALL USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'ADMINISTRADOR')
+);
+
+-- Políticas para VENDEDOR: solo pueden crear ventas y leer productos
+CREATE POLICY "vendedor_insert_ventas" ON ventas FOR INSERT WITH CHECK (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'VENDEDOR')
+);
+CREATE POLICY "vendedor_insert_detalle" ON detalle_ventas FOR INSERT WITH CHECK (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'VENDEDOR')
+);
+CREATE POLICY "vendedor_read_productos" ON productos FOR SELECT USING (
+  auth.role() = 'authenticated' AND 
+  EXISTS (SELECT 1 FROM usuarios WHERE auth_id = auth.uid() AND rol = 'VENDEDOR')
+);
 
 -- --------------------------------------------------------
 -- FUNCIONES Y TRIGGERS (INVENTARIO AUTOMÁTICO)

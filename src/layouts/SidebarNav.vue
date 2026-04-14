@@ -93,6 +93,7 @@
 
 <script setup>
 import { useRoute } from 'vue-router'
+import { Users } from 'lucide-vue-next'
 
 const props = defineProps({
   mini: Boolean,

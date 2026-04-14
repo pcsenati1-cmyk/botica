@@ -1,13 +1,12 @@
 <template>
   <div class="data-table">
-    <!-- Toolbar -->
     <div class="dt-toolbar">
       <div class="dt-search">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
           <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
           <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
-        <input v-model="search" type="text" :placeholder="searchPlaceholder" />
+        <input v-model="search" type="text" :placeholder="searchPlaceholder" @input="onSearch" />
         <button v-if="search" class="dt-clear" @click="search = ''">✕</button>
       </div>
       <div class="dt-toolbar-right">
@@ -16,7 +15,6 @@
       </div>
     </div>
 
-    <!-- Filter chips -->
     <div v-if="filters?.length" class="dt-filters">
       <button
         v-for="f in filters" :key="f.key"
@@ -28,13 +26,11 @@
       </button>
     </div>
 
-    <!-- Loading -->
     <div v-if="loading" class="dt-loading">
       <div class="spinner"></div>
       <span>Cargando...</span>
     </div>
 
-    <!-- Empty -->
     <div v-else-if="filteredRows.length === 0" class="dt-empty">
       <div class="dt-empty-icon">{{ emptyIcon }}</div>
       <p>{{ emptyText }}</p>
@@ -42,7 +38,6 @@
       <slot name="empty-action" />
     </div>
 
-    <!-- Table -->
     <div v-else class="dt-scroll">
       <table>
         <thead>
@@ -52,19 +47,27 @@
         </thead>
         <tbody>
           <tr
-            v-for="(row, i) in filteredRows"
+            v-for="(row, i) in paginatedRows"
             :key="row.id || i"
             class="dt-row"
             :class="rowClass?.(row)"
           >
-            <slot :row="row" :index="i" />
+            <slot :row="row" :index="startIndex + i" />
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Footer -->
-    <div v-if="!loading && filteredRows.length > 0" class="dt-footer">
+    <div v-if="!loading && filteredRows.length > 0 && paginate" class="dt-footer">
+      <span>Mostrando {{ startIndex + 1 }}-{{ endIndex }} de {{ filteredRows.length }}</span>
+      <div class="dt-pagination">
+        <button :disabled="currentPage === 1" @click="currentPage--">←</button>
+        <span class="dt-page-num">{{ currentPage }} / {{ totalPages }}</span>
+        <button :disabled="currentPage >= totalPages" @click="currentPage++">→</button>
+      </div>
+      <slot name="footer-right" />
+    </div>
+    <div v-else-if="!loading && filteredRows.length > 0" class="dt-footer">
       <span>Mostrando {{ filteredRows.length }} de {{ rows.length }}</span>
       <slot name="footer-right" />
     </div>
@@ -72,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   rows: Array,
@@ -85,19 +88,22 @@ const props = defineProps({
   emptyText: { type: String, default: 'No hay datos' },
   emptySubtext: { type: String, default: '' },
   rowClass: Function,
+  paginate: { type: Boolean, default: true },
+  pageSize: { type: Number, default: 10 }
 })
+
+const emit = defineEmits(['search'])
 
 const search = ref('')
 const activeFilter = ref(props.filters?.[0]?.key || '')
+const currentPage = ref(1)
 
 const filteredRows = computed(() => {
   let list = props.rows || []
 
-  // Apply filter tab
   const f = props.filters?.find(f => f.key === activeFilter.value)
   if (f?.filter) list = list.filter(f.filter)
 
-  // Apply search
   if (search.value && props.searchFields) {
     const q = search.value.toLowerCase()
     list = list.filter(row =>
@@ -105,6 +111,23 @@ const filteredRows = computed(() => {
     )
   }
   return list
+})
+
+const totalPages = computed(() => Math.ceil(filteredRows.value.length / props.pageSize))
+const startIndex = computed(() => (currentPage.value - 1) * props.pageSize)
+const endIndex = computed(() => Math.min(startIndex.value + props.pageSize, filteredRows.value.length))
+const paginatedRows = computed(() => {
+  if (!props.paginate) return filteredRows.value
+  return filteredRows.value.slice(startIndex.value, endIndex.value)
+})
+
+const onSearch = () => {
+  currentPage.value = 1
+  emit('search', search.value)
+}
+
+watch(() => props.rows, () => {
+  currentPage.value = 1
 })
 </script>
 
@@ -162,4 +185,13 @@ th { padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 700; co
 :deep(td) { padding: 11px 14px; vertical-align: middle; font-size: 13px; color: var(--text); }
 
 .dt-footer { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); background: var(--bg); }
+.dt-pagination { display: flex; align-items: center; gap: 8px; }
+.dt-pagination button {
+  background: var(--card-bg); border: 1px solid var(--border); color: var(--text);
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+  transition: all 0.15s;
+}
+.dt-pagination button:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.dt-pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+.dt-page-num { font-size: 12px; color: var(--text-secondary); }
 </style>

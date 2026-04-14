@@ -23,7 +23,7 @@
         :userName="userName"
         :userInitial="userInitial"
         :userRole="userRole"
-        :isAdmin="authStore.isAdmin"
+        :isAdmin="isAdminUser"
         :alertCount="alertCount"
         :mainNav="mainNav"
         :adminNav="adminNav"
@@ -57,7 +57,9 @@
       <!-- Alert bar -->
       <transition name="slide-down">
         <div v-if="showAlerts && alertCount > 0" class="alert-bar">
-          <span class="alert-bar-title">⚠️ {{ alertCount }} productos con stock bajo</span>
+          <span class="alert-bar-title">
+            <AlertTriangle :size="14" /> {{ alertCount }} productos con stock bajo
+          </span>
           <div class="alert-bar-chips">
             <span
               v-for="p in inventarioStore.productosBajoStock.slice(0, 5)"
@@ -66,7 +68,9 @@
               :class="p.stock === 0 ? 'chip-red' : 'chip-amber'"
             >{{ p.nombre }} ({{ p.stock }})</span>
           </div>
-          <button class="alert-bar-close" @click="showAlerts = false">✕</button>
+          <button class="alert-bar-close" @click="showAlerts = false">
+            <X :size="14" />
+          </button>
         </div>
       </transition>
 
@@ -88,6 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useInventarioStore } from '@/stores/inventario'
 import { useDark, useToggle, useMediaQuery, useLocalStorage } from '@vueuse/core'
+import { AlertTriangle, X } from 'lucide-vue-next'
 import SidebarNav from './SidebarNav.vue'
 import TopBar from './TopBar.vue'
 
@@ -121,17 +126,23 @@ function toggleSidebar() {
 }
 
 const userName = computed(() =>
+  authStore.userProfile?.nombres ||
   authStore.user?.user_metadata?.nombres ||
   authStore.user?.email?.split('@')[0] ||
   'Usuario'
 )
 const userInitial = computed(() => userName.value.charAt(0).toUpperCase())
 const userRole = computed(() => {
-  const r = authStore.user?.user_metadata?.rol || authStore.user?.user_metadata?.role
+  const r = authStore.userProfile?.rol || authStore.user?.user_metadata?.rol
   return (r === 'administrador' || r === 'ADMIN') ? 'Administrador' : 'Vendedor'
 })
 const currentPageTitle = computed(() => route.meta?.title || 'Dashboard')
 const alertCount = computed(() => inventarioStore.productosBajoStock?.length || 0)
+const isAdminUser = computed(() => {
+  const perfil = authStore.userProfile
+  const metadata = authStore.user?.user_metadata
+  return perfil?.rol === 'administrador' || metadata?.rol === 'administrador' || metadata?.role === 'administrador'
+})
 
 const mainNav = computed(() => [
   {

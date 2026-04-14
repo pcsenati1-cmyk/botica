@@ -55,9 +55,11 @@
 
     <!-- Footer con totales y pago -->
     <div v-if="items.length > 0" class="car-footer">
-      <!-- Totales -->
       <div class="totales">
         <div class="tot-row"><span>Subtotal</span><span>S/ {{ subtotal.toFixed(2) }}</span></div>
+        <div v-if="descuento > 0" class="tot-row tot-desc">
+          <span>Descuento ({{ descuento }}%)</span><span>-S/ {{ montoDescuento.toFixed(2) }}</span>
+        </div>
         <div class="tot-row"><span>IGV (18%)</span><span>S/ {{ igv.toFixed(2) }}</span></div>
         <div class="tot-row tot-grand">
           <span>Total a pagar</span>
@@ -95,14 +97,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch, ref } from 'vue'
 
 const props = defineProps({
   items: Array,
   modelValue: String,
   loading: Boolean,
 })
-defineEmits(['add', 'remove', 'increment', 'decrement', 'clear', 'confirm', 'update:modelValue'])
+const emit = defineEmits(['add', 'remove', 'increment', 'decrement', 'clear', 'confirm', 'update:modelValue'])
 
 const COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#3b82f6']
 const color = (n) => COLORS[n.charCodeAt(0) % COLORS.length]
@@ -110,13 +112,19 @@ const color = (n) => COLORS[n.charCodeAt(0) % COLORS.length]
 const metodos = [
   { key: 'EFECTIVO', icon: '💵', label: 'Efectivo' },
   { key: 'TARJETA', icon: '💳', label: 'Tarjeta' },
-  { key: 'YAPE', icon: '📱', label: 'Yape' },
-  { key: 'PLIN', icon: '📲', label: 'Plin' },
+  { key: 'TRANSFERENCIA', icon: '📱', label: 'Transferencia' },
 ]
 
+const descuento = ref(0)
+const aplicarDescuento = (porcentaje) => {
+  descuento.value = Number(porcentaje) || 0
+}
+
 const subtotal = computed(() => props.items.reduce((s, i) => s + i.precio * i.cantidad, 0))
-const igv = computed(() => subtotal.value * 0.18)
-const total = computed(() => subtotal.value)
+const montoDescuento = computed(() =>subtotal.value * (descuento.value / 100))
+const subtotalConDescuento = computed(() => subtotal.value - montoDescuento.value)
+const igv = computed(() => subtotalConDescuento.value * 0.18)
+const total = computed(() => subtotalConDescuento.value + igv.value)
 </script>
 
 <style scoped>
@@ -187,6 +195,7 @@ const total = computed(() => subtotal.value)
   display: flex; justify-content: space-between;
   font-size: 12px; color: var(--text-secondary); padding: 3px 0;
 }
+.tot-desc { color: var(--success); }
 .tot-grand {
   font-size: 15px; font-weight: 800; color: var(--text);
   padding-top: 10px; border-top: 1px solid var(--border); margin-top: 6px;

@@ -4,10 +4,18 @@ import { supabase } from '@/supabase'
 import { useAuthStore } from './auth'
 import { useInventarioStore } from './inventario'
 
+const handleSupabaseError = (error, context = '') => {
+  if (!error) return 'Error desconocido'
+  if (error.code) return `Error ${error.code}: ${error.message}`
+  if (error.details) return `${context}: ${error.details}`
+  return error.message || context || 'Error desconocido'
+}
+
 export const useVentasStore = defineStore('ventas', () => {
   const ventas = ref([])
   const loading = ref(false)
   const error = ref(null)
+  const lastUpdated = ref(null)
 
   const ventasDelDia = computed(() => {
     const hoy = new Date().toISOString().split('T')[0]
@@ -16,6 +24,12 @@ export const useVentasStore = defineStore('ventas', () => {
 
   const totalVendidoDia = computed(() => {
     return ventasDelDia.value.reduce((sum, v) => sum + (v.total || 0), 0)
+  })
+
+  const ventasUltimoMes = computed(() => {
+    const treintaDias = new Date()
+    treintaDias.setDate(treintaDias.getDate() - 30)
+    return ventas.value.filter(v => new Date(v.fecha) >= treintaDias)
   })
 
   const productosMasVendidos = computed(() => {
@@ -32,41 +46,63 @@ export const useVentasStore = defineStore('ventas', () => {
       .slice(0, 5)
   })
 
-  async function fetchVentas() {
+  async function fetchVentas(includeDetails = true) {
     try {
       loading.value = true
       error.value = null
       
-      const { data: ventasData, error: ventasError } = await supabase
-        .from('ventas')
-        .select('*')
-        .order('fecha', { ascending: false })
-      
-      if (ventasError) throw ventasError
-      
-      for (let venta of ventasData) {
-        const { data: detallesData } = await supabase
-          .from('detalle_ventas')
-          .select('*')
-          .eq('venta_id', venta.id)
+      if (includeDetails) {
+        const { data: ventasData, error: ventasError } = await supabase
+          .from('ventas')
+          .select(`
+            *,
+            detalles:detalle_ventas(*),
+            usuario:usuarios(*)
+          `)
+          .order('fecha', { ascending: false })
         
-        venta.detalles = detallesData || []
+        if (ventasError) throw ventasError
+        ventas.value = ventasData || []
+      } else {
+        const { data: ventasData, error: ventasError } = await supabase
+          .from('ventas')
+          .select('*')
+          .order('fecha', { ascending: false })
+        
+        if (ventasError) throw ventasError
+        ventas.value = ventasData || []
       }
       
-      ventas.value = ventasData || []
+      lastUpdated.value = new Date().toISOString()
     } catch (e) {
-      error.value = e.message
+      error.value = handleSupabaseError(e, 'Error al cargar ventas')
     } finally {
       loading.value = false
     }
   }
 
   async function crearVenta(carrito, usuarioId, metodoPago = 'efectivo') {
+    const inventarioStore = useInventarioStore()
+    
     try {
       loading.value = true
       error.value = null
 
-      const total = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0)
+      if (!carrito || carrito.length === 0) {
+        throw new Error('El carrito está vacío')
+      }
+
+      for (const item of carrito) {
+        const producto = inventarioStore.productos.find(p => p.id === item.id)
+        if (!producto) {
+          throw new Error(`Producto con ID ${item.id} no encontrado`)
+        }
+        if (producto.stock < item.cantidad) {
+          throw new Error(`Stock insuficiente para ${producto.nombre}. Disponible: ${producto.stock}`)
+        }
+      }
+
+      const total = carousel.reduce((sum, item) => sum + (item.precio * item.cantidad), 0)
       
       const { data: ventaData, error: ventaError } = await supabase
         .from('ventas')
@@ -81,37 +117,45 @@ export const useVentasStore = defineStore('ventas', () => {
       if (ventaError) throw ventaError
       const ventaId = ventaData[0].id
 
-      const inventarioStore = useInventarioStore()
-      
-      for (const item of carrito) {
-        const { error: detalleError } = await supabase
-          .from('detalle_ventas')
-          .insert([{
-            venta_id: ventaId,
-            producto_id: item.id,
-            cantidad: item.cantidad,
-            precio_unitario: item.precio,
-            subtotal: item.precio * item.cantidad
-          }])
-        
-        if (detalleError) throw detalleError
+      const detallesVenta = carousel.map(item => ({
+        venta_id: ventaId,
+        producto_id: item.id,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio,
+        subtotal: item.precio * item.cantidad
+      }))
 
+      const { error: detallesError } = await supabase
+        .from('detalle_ventas')
+        .insert(detallesVenta)
+      
+      if (detallesError) throw detallesError
+
+      const updates = carousel.map(item => {
         const producto = inventarioStore.productos.find(p => p.id === item.id)
-        if (producto) {
-          const nuevoStock = producto.stock - item.cantidad
-          await supabase
-            .from('productos')
-            .update({ stock: nuevoStock })
-            .eq('id', item.id)
+        return {
+          id: item.id,
+          stock: producto.stock - item.cantidad
+        }
+      })
+
+      for (const update of updates) {
+        const { error: stockError } = await supabase
+          .from('productos')
+          .update({ stock: update.stock })
+          .eq('id', update.id)
+        
+        if (stockError) {
+          console.error(`Error actualizando stock del producto ${update.id}:`, stockError)
         }
       }
 
       await inventarioStore.fetchProductos()
-      await fetchVentas()
+      await fetchVentas(false)
       
-      return ventaData[0]
+      return { ...ventaData[0], detalles: detallesVenta }
     } catch (e) {
-      error.value = e.message
+      error.value = handleSupabaseError(e, 'Error al crear venta')
       throw e
     } finally {
       loading.value = false

@@ -1,0 +1,10 @@
+version: 2
+authtoken: 3BLjGVivceieTItd1F8QT9gH7zg_75MzcmDXqmEpqVd18j1KX
+
+tunnels:
+  development:
+    addr: "5173"
+    proto: http
+
+region: us
+log_level: info

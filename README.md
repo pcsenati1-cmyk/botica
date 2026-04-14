@@ -45,6 +45,20 @@ npm run dev
 
 El proyecto se ejecutará en `http://localhost:5173`
 
+### 5. (Opcional) Acceso Externo con ngrok
+
+Para exponer el proyecto a internet temporalmente:
+
+```bash
+# Instalar ngrok si no está disponible
+npm install
+
+# Iniciar con ngrok
+npm run ngrok:start
+```
+
+Esto generará una URL pública (ej: `https://abc123.ngrok.io`) que podrás compartir para testing externo.
+
 ## Características
 
 ### Autenticación

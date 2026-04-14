@@ -1,7 +1,9 @@
 <template>
   <div class="page-header">
     <div class="ph-left">
-      <div class="ph-icon" v-if="icon">{{ icon }}</div>
+      <div class="ph-icon" v-if="icon || $slots.icon">
+        <slot name="icon">{{ icon }}</slot>
+      </div>
       <div>
         <h1 class="ph-title">{{ title }}</h1>
         <p class="ph-sub" v-if="subtitle">{{ subtitle }}</p>
@@ -14,7 +16,11 @@
 </template>
 
 <script setup>
-defineProps({ title: String, subtitle: String, icon: String })
+defineProps({ 
+  title: String, 
+  subtitle: String, 
+  icon: [String, Object] 
+})
 </script>
 
 <style scoped>

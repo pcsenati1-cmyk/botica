@@ -11,3 +11,8 @@ app.use(pinia)
 app.use(router)
 
 app.mount('#app')
+
+import('./stores/tema').then(({ useTemaStore }) => {
+  const temaStore = useTemaStore()
+  temaStore.initTema()
+})
