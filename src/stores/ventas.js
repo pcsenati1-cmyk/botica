@@ -61,7 +61,7 @@ export const useVentasStore = defineStore('ventas', () => {
     }
   }
 
-  async function crearVenta(carrito, usuarioId) {
+  async function crearVenta(carrito, usuarioId, metodoPago = 'efectivo') {
     try {
       loading.value = true
       error.value = null
@@ -73,6 +73,7 @@ export const useVentasStore = defineStore('ventas', () => {
         .insert([{
           usuario_id: usuarioId,
           total,
+          metodo_pago: metodoPago.toUpperCase(),
           fecha: new Date().toISOString()
         }])
         .select()

@@ -1,71 +1,179 @@
-<template>
-  <div class="dashboard-layout">
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
-      <div class="sidebar-header">
-        <h2 v-if="!sidebarCollapsed">Nova Salud</h2>
-        <span v-else>NS</span>
-      </div>
-      <nav class="sidebar-nav">
-        <router-link to="/" class="nav-item" exact-active-class="active">
-          <span class="nav-icon">📊</span>
-          <span v-if="!sidebarCollapsed" class="nav-label">Dashboard</span>
-        </router-link>
-        <router-link to="/inventario" class="nav-item" active-class="active">
-          <span class="nav-icon">📦</span>
-          <span v-if="!sidebarCollapsed" class="nav-label">Inventario</span>
-        </router-link>
-        <router-link to="/ventas" class="nav-item" active-class="active">
-          <span class="nav-icon">🛒</span>
-          <span v-if="!sidebarCollapsed" class="nav-label">Ventas</span>
-        </router-link>
-      </nav>
-      <div class="sidebar-footer">
-        <button @click="handleLogout" class="nav-item logout">
-          <span class="nav-icon">🚪</span>
-          <span v-if="!sidebarCollapsed" class="nav-label">Cerrar Sesión</span>
-        </button>
-      </div>
-    </aside>
-    <main class="main-content">
-      <header class="top-bar">
-        <button @click="toggleSidebar" class="menu-toggle">
-          <span>☰</span>
-        </button>
-        <div class="user-info">
-          <span>{{ userName }}</span>
+﻿<template>
+  <div class="app-shell">
+
+    <!-- Mobile overlay -->
+    <div
+      v-if="isMobile && mobileOpen"
+      class="mob-overlay"
+      @click="mobileOpen = false"
+    ></div>
+
+    <!-- SIDEBAR — desktop: siempre visible, mini o full -->
+    <!-- mobile: oculto por defecto, se abre con overlay -->
+    <div
+      class="sidebar-wrap"
+      :class="{
+        'sidebar-wrap--mini': !isMobile && mini,
+        'sidebar-wrap--mobile-open': isMobile && mobileOpen,
+        'sidebar-wrap--mobile': isMobile
+      }"
+    >
+      <SidebarNav
+        :mini="!isMobile && mini"
+        :userName="userName"
+        :userInitial="userInitial"
+        :userRole="userRole"
+        :isAdmin="authStore.isAdmin"
+        :alertCount="alertCount"
+        :mainNav="mainNav"
+        :adminNav="adminNav"
+        @close="mobileOpen = false"
+        @logout="handleLogout"
+      />
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div
+      class="main-wrap"
+      :class="{
+        'main-wrap--mini': !isMobile && mini,
+        'main-wrap--full': !isMobile && !mini
+      }"
+    >
+      <TopBar
+        :pageTitle="currentPageTitle"
+        :userName="userName"
+        :userInitial="userInitial"
+        :userEmail="authStore.user?.email"
+        :isDark="isDark"
+        :alertCount="alertCount"
+        :isMobile="isMobile"
+        @toggle="toggleSidebar"
+        @toggleAlerts="showAlerts = !showAlerts"
+        @toggleDark="toggleDark()"
+        @logout="handleLogout"
+      />
+
+      <!-- Alert bar -->
+      <transition name="slide-down">
+        <div v-if="showAlerts && alertCount > 0" class="alert-bar">
+          <span class="alert-bar-title">⚠️ {{ alertCount }} productos con stock bajo</span>
+          <div class="alert-bar-chips">
+            <span
+              v-for="p in inventarioStore.productosBajoStock.slice(0, 5)"
+              :key="p.id"
+              class="alert-chip"
+              :class="p.stock === 0 ? 'chip-red' : 'chip-amber'"
+            >{{ p.nombre }} ({{ p.stock }})</span>
+          </div>
+          <button class="alert-bar-close" @click="showAlerts = false">✕</button>
         </div>
-      </header>
-      <div class="content-area">
-        <router-view />
-      </div>
-    </main>
-    <div v-if="inventarioStore.productosBajoStock.length > 0" class="stock-alert">
-      <span>⚠️ {{ inventarioStore.productosBajoStock.length }} productos con stock bajo</span>
+      </transition>
+
+      <!-- Page -->
+      <main class="page-content">
+        <router-view v-slot="{ Component, route }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </transition>
+        </router-view>
+      </main>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useInventarioStore } from '@/stores/inventario'
+import { useDark, useToggle, useMediaQuery, useLocalStorage } from '@vueuse/core'
+import SidebarNav from './SidebarNav.vue'
+import TopBar from './TopBar.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const inventarioStore = useInventarioStore()
 
-const sidebarCollapsed = ref(false)
+const isDark = useDark()
+const toggleDark = useToggle(isDark)
+const isMobile = useMediaQuery('(max-width: 768px)')
 
-const userName = computed(() => authStore.user?.user_metadata?.nombre || 'Usuario')
+// Desktop: mini (64px) vs full (240px)
+const mini = useLocalStorage('sb-mini', false)
+// Mobile: open/close
+const mobileOpen = ref(false)
+
+const showAlerts = ref(false)
+
+// On mobile resize, reset
+watch(isMobile, (val) => {
+  if (val) mobileOpen.value = false
+})
+
+function toggleSidebar() {
+  if (isMobile.value) {
+    mobileOpen.value = !mobileOpen.value
+  } else {
+    mini.value = !mini.value
+  }
+}
+
+const userName = computed(() =>
+  authStore.user?.user_metadata?.nombres ||
+  authStore.user?.email?.split('@')[0] ||
+  'Usuario'
+)
+const userInitial = computed(() => userName.value.charAt(0).toUpperCase())
+const userRole = computed(() => {
+  const r = authStore.user?.user_metadata?.rol || authStore.user?.user_metadata?.role
+  return (r === 'administrador' || r === 'ADMIN') ? 'Administrador' : 'Vendedor'
+})
+const currentPageTitle = computed(() => route.meta?.title || 'Dashboard')
+const alertCount = computed(() => inventarioStore.productosBajoStock?.length || 0)
+
+const mainNav = computed(() => [
+  {
+    to: '/admin',
+    label: 'Dashboard',
+    icon: `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="6" height="6" rx="2" stroke="currentColor" stroke-width="1.5"/><rect x="10" y="2" width="6" height="6" rx="2" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="6" height="6" rx="2" stroke="currentColor" stroke-width="1.5"/><rect x="10" y="10" width="6" height="6" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>`
+  },
+  {
+    to: '/admin/ventas',
+    label: 'Punto de Venta',
+    icon: `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M2 3h2l2.5 8h7l2-5H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="14.5" r="1.2" fill="currentColor"/><circle cx="13" cy="14.5" r="1.2" fill="currentColor"/></svg>`
+  },
+  {
+    to: '/admin/inventario',
+    label: 'Inventario',
+    icon: `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M9 2l7 4v6l-7 4-7-4V6l7-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 2v12M2 6l7 4 7-4" stroke="currentColor" stroke-width="1.5"/></svg>`,
+    badge: alertCount.value > 0 ? alertCount.value : null
+  },
+  {
+    to: '/admin/alertas',
+    label: 'Alertas de Stock',
+    icon: `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M9 2L1.5 15.5h15L9 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 8v3M9 13.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    badge: alertCount.value > 0 ? alertCount.value : null
+  },
+  {
+    to: '/admin/reportes',
+    label: 'Reportes',
+    icon: `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 10l2.5-3 2.5 2 3-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+])
+
+const adminNav = computed(() => [
+  {
+    to: '/admin/usuarios',
+    label: 'Usuarios',
+    icon: `<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 16c0-3.3 2.7-6 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="14" cy="11" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M11.5 16h5M14 13.5v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`
+  },
+])
 
 onMounted(async () => {
   await inventarioStore.fetchProductos()
 })
-
-function toggleSidebar() {
-  sidebarCollapsed.value = !sidebarCollapsed.value
-}
 
 async function handleLogout() {
   await authStore.signOut()
@@ -74,176 +182,102 @@ async function handleLogout() {
 </script>
 
 <style scoped>
-.dashboard-layout {
+.app-shell {
   display: flex;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg);
+  position: relative;
 }
 
-.sidebar {
-  width: 260px;
-  background: white;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
-  display: flex;
-  flex-direction: column;
-  transition: width 0.3s;
+/* Mobile overlay */
+.mob-overlay {
   position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 199;
+  backdrop-filter: blur(2px);
+}
+
+/* ── SIDEBAR WRAPPER ── */
+.sidebar-wrap {
+  /* Desktop full */
+  width: 240px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
   height: 100vh;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 100;
 }
 
-.sidebar.collapsed {
-  width: 70px;
+/* Desktop mini */
+.sidebar-wrap--mini {
+  width: 64px;
 }
 
-.sidebar-header {
-  padding: 20px;
-  border-bottom: 1px solid #eee;
+/* Mobile: hidden by default */
+.sidebar-wrap--mobile {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 200;
 }
 
-.sidebar-header h2 {
-  font-size: 20px;
-  color: #667eea;
-  margin: 0;
+/* Mobile: open */
+.sidebar-wrap--mobile-open {
+  transform: translateX(0);
 }
 
-.sidebar-header span {
-  font-size: 20px;
-  color: #667eea;
-  font-weight: bold;
-}
-
-.sidebar-nav {
+/* ── MAIN WRAPPER ── */
+.main-wrap {
   flex: 1;
-  padding: 16px 12px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  padding: 14px 16px;
-  margin-bottom: 8px;
-  border-radius: 10px;
-  color: #666;
-  text-decoration: none;
-  transition: all 0.2s;
-  cursor: pointer;
-  background: none;
-  border: none;
-  width: 100%;
-  font-size: 15px;
-}
-
-.nav-item:hover {
-  background: #f0f4ff;
-  color: #667eea;
-}
-
-.nav-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.nav-icon {
-  font-size: 18px;
-  margin-right: 12px;
-  width: 24px;
-  text-align: center;
-}
-
-.sidebar.collapsed .nav-icon {
-  margin-right: 0;
-}
-
-.nav-label {
-  font-weight: 500;
-}
-
-.sidebar-footer {
-  padding: 16px 12px;
-  border-top: 1px solid #eee;
-}
-
-.logout:hover {
-  background: #fee;
-  color: #e53e3e;
-}
-
-.main-content {
-  flex: 1;
-  margin-left: 260px;
-  transition: margin-left 0.3s;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
 }
 
-.sidebar.collapsed + .main-content {
-  margin-left: 70px;
-}
-
-.top-bar {
+/* Alert bar */
+.alert-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  position: sticky;
-  top: 0;
-  z-index: 50;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 20px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
 }
+.alert-bar-title { font-size: 12px; font-weight: 700; color: #92400e; flex-shrink: 0; }
+.alert-bar-chips { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
+.alert-chip { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 99px; }
+.chip-red { background: #fee2e2; color: #991b1b; }
+.chip-amber { background: #fef3c7; color: #92400e; }
+.alert-bar-close { background: none; border: none; cursor: pointer; color: #92400e; font-size: 13px; flex-shrink: 0; }
 
-.menu-toggle {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 8px;
-}
-
-.menu-toggle:hover {
-  background: #f0f4ff;
-}
-
-.user-info {
-  font-weight: 500;
-  color: #333;
-}
-
-.content-area {
+/* Page content */
+.page-content {
   flex: 1;
   padding: 24px;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
-.stock-alert {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: #fc0;
-  color: #333;
-  padding: 12px 20px;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  font-weight: 500;
-  z-index: 1000;
-}
+/* Transitions */
+.slide-down-enter-active, .slide-down-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.slide-down-enter-from, .slide-down-leave-to { opacity: 0; transform: translateY(-8px); }
+
+.page-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.page-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.page-enter-from { opacity: 0; transform: translateY(8px); }
+.page-leave-to { opacity: 0; transform: translateY(-4px); }
 
 @media (max-width: 768px) {
-  .sidebar {
-    width: 70px;
-  }
-  
-  .main-content {
-    margin-left: 70px;
-  }
-  
-  .nav-label {
-    display: none;
-  }
-  
-  .content-area {
-    padding: 16px;
-  }
+  .sidebar-wrap { display: none; }
+  .sidebar-wrap--mobile { display: block; }
+  .page-content { padding: 14px; }
 }
 </style>
